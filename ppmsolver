@@ -1,0 +1,48 @@
+import os
+import sys
+import time
+import itertools
+import click
+import pandas as pd
+from dwave.system import LeapHybridCQMSampler
+from dimod import ConstrainedQuadraticModel, BinaryQuadraticModel, QuadraticModel
+
+# Problem
+import random
+num_items = 100  # Set this to the desired number of items
+weights = [random.randint(0, 100) for _ in range(num_items)]
+values = [random.randint(0, 100) for _ in range(num_items)]
+max_weight = 5000
+
+print(f"solving for {len(values)} items")
+print("build the model")
+cqm = ConstrainedQuadraticModel()
+obj = BinaryQuadraticModel(vartype="BINARY")
+constraint = QuadraticModel()
+
+for i in range(len(values)):
+    obj.add_variable(i)
+    obj.set_linear(i, -values[i])
+    constraint.add_variable("BINARY", i)
+    constraint.set_linear(i, weights[i])
+
+cqm.set_objective(obj)
+cqm.add_constraint(constraint, sense="<=", rhs=max_weight, label="capacity")
+
+sampler = LeapHybridCQMSampler()
+print(f"submit model to solver {sampler.solver.name}")
+sampleset = sampler.sample_cqm(cqm, label="knapsack problem")
+
+print("parse the solver output")
+feasible_sampleset = sampleset.filter(lambda row: row.is_feasible)
+if not len(feasible_sampleset):
+    raise ValueError("No feasible solution found")
+best = feasible_sampleset.first
+
+selected_items = [key for key, val in best.sample.items() if val == 1.0]
+total_weight = sum([weights[i] for i in selected_items])
+total_value = sum([values[i] for i in selected_items])
+
+print(f"Selected items: {selected_items}")
+print(f"Total weight: {total_weight}")
+print(f"Total value: {total_value}")
